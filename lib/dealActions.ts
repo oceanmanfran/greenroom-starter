@@ -22,7 +22,20 @@ import { db } from "@/db";
 import { deals } from "@/db/schema";
 import type { DealRecoup, DeductionStep } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
+import { revalidatePath as nextRevalidatePath } from "next/cache";
+
+/**
+ * revalidatePath only works inside a Next.js request context. Wrap it so
+ * test harnesses or other non-request callers don't blow up when calling
+ * an action directly. In production this is a no-op safety net.
+ */
+function revalidatePath(path: string) {
+  try {
+    nextRevalidatePath(path);
+  } catch {
+    // outside a request context, ignore
+  }
+}
 import { randomBytes } from "node:crypto";
 import { extractAndAnalyzeDeal, type ExtractionResult } from "@/lib/ai";
 import { getAgentContextForShow } from "@/lib/queries";

@@ -148,6 +148,12 @@ export async function getAgentContextForShow(showId: string): Promise<{
   const seenShows = new Set<string>();
   for (const r of allRows) {
     if (!r.showId || seenShows.has(r.showId)) continue;
+    // Don't count the current show in its own "prior" history — the AI
+    // warning is meant to read "this agent has done X on PREVIOUS shows."
+    if (r.showId === showId) {
+      seenShows.add(r.showId);
+      continue;
+    }
     seenShows.add(r.showId);
     totalShows++;
     if (r.disputedAt) disputedShows++;

@@ -874,6 +874,12 @@ async function main() {
 
   const artistAgentMap = new Map<string, string>();
   for (const a of ARTIST_DEFS) artistAgentMap.set(a.id, pickAgentForArtist(a.tier));
+  // Coastal Spell's dispute thread names Daniel Hwang at WME explicitly,
+  // so pin this artist to that agent regardless of the random draw. Keeps
+  // the dispute-thread narrative consistent with the relationship data,
+  // and means the agent-history lookup on /structure-deal surfaces the
+  // BC12 pattern (5 disputed marketing recoups) when reviewing this deal.
+  artistAgentMap.set("art_coastal_spell", "agent_daniel_hwang");
 
   await db.insert(artists).values(
     ARTIST_DEFS.map((a) => ({
