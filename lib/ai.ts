@@ -366,6 +366,35 @@ function mockExtraction(prose: string, agent: AgentContext | null): ExtractionRe
     };
   }
 
+  // Sanity warnings on implausible extractions. The form is reviewed
+  // by the booker before save, but surface obvious garbage explicitly
+  // so an unusual extraction isn't waved through.
+  const notes: string[] = [
+    "Mock mode: parsed with the local regex extractor. For richer reasoning on edge cases, set OPENAI_API_KEY in .env.local.",
+  ];
+  if (guaranteeAmount != null && guaranteeAmount > 500_000) {
+    notes.push(
+      `Extracted guarantee of $${guaranteeAmount.toLocaleString()} looks unusually high for an indie venue deal. Verify before saving.`,
+    );
+  }
+  if (percentage != null && (percentage < 0 || percentage > 1)) {
+    notes.push(
+      `Extracted percentage (${percentage}) is outside the expected 0-1 range. The form will clamp it, but check the source phrase.`,
+    );
+  }
+  if (expenseCap != null && expenseCap > 50_000) {
+    notes.push(
+      `Extracted expense cap of $${expenseCap.toLocaleString()} is unusually high. Worth a second look.`,
+    );
+  }
+  for (const r of recoups) {
+    if (expenseCap != null && r.amount > expenseCap * 1.5) {
+      notes.push(
+        `Recoup "${r.label}" ($${r.amount.toLocaleString()}) is larger than 150% of the expense cap. Confirm the scope and amount are right.`,
+      );
+    }
+  }
+
   return {
     mode: "mock",
     extracted: {
@@ -379,9 +408,7 @@ function mockExtraction(prose: string, agent: AgentContext | null): ExtractionRe
       bonuses,
     },
     ambiguities,
-    notes: [
-      "Mock mode: parsed with the local regex extractor. For richer reasoning on edge cases, set OPENAI_API_KEY in .env.local.",
-    ],
+    notes,
   };
 }
 

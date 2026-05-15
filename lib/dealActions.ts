@@ -23,6 +23,7 @@ import { deals } from "@/db/schema";
 import type { DealRecoup, DeductionStep } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { randomBytes } from "node:crypto";
 import { extractAndAnalyzeDeal, type ExtractionResult } from "@/lib/ai";
 import { getAgentContextForShow } from "@/lib/queries";
 
@@ -211,8 +212,13 @@ export async function disputeDealAction(
 
 // ---------- helpers ----------
 
+/**
+ * Generate a magic-link token. 128 bits of cryptographic entropy from
+ * Node's CSPRNG so an attacker can't guess or enumerate tokens. The
+ * deal-id prefix is human-readable for debugging only; the security
+ * comes entirely from the random suffix.
+ */
 function randomToken(dealId: string): string {
-  const rand = Math.random().toString(36).slice(2, 10);
-  const ts = Date.now().toString(36);
-  return `tok_${dealId.slice(0, 16)}_${ts}_${rand}`;
+  const rand = randomBytes(16).toString("hex");
+  return `tok_${dealId.slice(0, 16)}_${rand}`;
 }
