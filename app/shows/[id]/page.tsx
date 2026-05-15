@@ -6,6 +6,9 @@ import {
   AlertCircle,
   Clock,
   TrendingUp,
+  Sparkles,
+  Lock,
+  Send,
 } from "lucide-react";
 import { getShowById } from "@/lib/queries";
 import {
@@ -150,6 +153,62 @@ export default async function ShowDetailPage({
                 {show.internalNotes}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Confirmation banner: surfaces deal-confirmation lifecycle. */}
+        {deal && deal.confirmationStatus !== "locked" && (
+          <Link
+            href={`/shows/${show.id}/structure-deal`}
+            className="mb-6 block rounded-lg ring-1 ring-amber-200/60 bg-amber-50/40 hover:bg-amber-50/70 transition px-5 py-3.5"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex gap-3">
+                <Sparkles className="h-4 w-4 text-amber-700 mt-0.5 shrink-0" />
+                <div>
+                  <div className="text-[13px] font-semibold text-amber-900">
+                    {deal.confirmationStatus === "draft"
+                      ? "This deal hasn't been structured or confirmed by the agent."
+                      : deal.confirmationStatus === "sent_to_agent" ||
+                          deal.confirmationStatus === "viewed"
+                        ? "Awaiting agent confirmation."
+                        : deal.confirmationStatus === "disputed"
+                          ? "Agent flagged this deal for revision."
+                          : "Deal confirmation in progress."}
+                  </div>
+                  <div className="text-[12px] text-amber-800/80 mt-1 leading-relaxed">
+                    Lock the deal in writing with both sides before show night.
+                    Settlement runs against the locked version.
+                  </div>
+                </div>
+              </div>
+              <span className="text-[12px] font-medium text-amber-900 inline-flex items-center gap-1 shrink-0">
+                Structure & send <span aria-hidden>→</span>
+              </span>
+            </div>
+          </Link>
+        )}
+        {deal && deal.confirmationStatus === "locked" && (
+          <div className="mb-6 rounded-lg ring-1 ring-brand-200/60 bg-brand-50/30 px-5 py-3 flex items-center gap-3">
+            <Lock className="h-4 w-4 text-brand-700 shrink-0" />
+            <div className="text-[12.5px] text-brand-900 flex-1">
+              Deal locked.{" "}
+              {agent?.name ? `${agent.name} confirmed` : "Agent confirmed"} on{" "}
+              {deal.confirmedByAgentAt
+                ? new Date(deal.confirmedByAgentAt).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })
+                : "—"}
+              .
+            </div>
+            <Link
+              href={`/shows/${show.id}/structure-deal`}
+              className="text-[12px] font-medium text-brand-700 hover:text-brand-800 hover:underline"
+            >
+              View
+            </Link>
           </div>
         )}
 

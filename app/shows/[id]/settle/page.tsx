@@ -11,6 +11,8 @@ import {
   XCircle,
   Wallet,
   TrendingUp,
+  Lock,
+  Sparkles,
 } from "lucide-react";
 import { getShowById } from "@/lib/queries";
 import {
@@ -67,6 +69,8 @@ export default async function SettlePage({
     ticketSales,
     expenses,
     venueCapacity: data.venue?.capacity ?? undefined,
+    requireLocked: true,
+    showId: show.id,
   });
   const grossSoFar = ticketSales.reduce((sum, t) => sum + t.gross, 0);
   const totalFees = ticketSales.reduce((sum, t) => sum + t.fees, 0);
@@ -129,7 +133,8 @@ export default async function SettlePage({
       <div className="space-y-6 mt-6">
         {!calc.supported ? (
           <UnsupportedDeal
-            dealType={calc.dealType}
+            calc={calc}
+            showId={show.id}
             deal={deal}
             existingSettlement={settlement}
             grossSoFar={grossSoFar}
@@ -139,7 +144,11 @@ export default async function SettlePage({
             expenseRowCount={expenses.length}
           />
         ) : (
-          <SupportedSettlement calc={calc} existingSettlement={settlement} />
+          <SupportedSettlement
+            calc={calc}
+            existingSettlement={settlement}
+            dealLocked={deal.confirmationStatus === "locked"}
+          />
         )}
 
         {recoups.length > 0 && <RecoupsSection recoups={recoups} />}
@@ -356,7 +365,8 @@ function LifecycleBar({
 }
 
 function UnsupportedDeal({
-  dealType,
+  calc,
+  showId,
   deal,
   existingSettlement,
   grossSoFar,
@@ -365,7 +375,8 @@ function UnsupportedDeal({
   ticketCount,
   expenseRowCount,
 }: {
-  dealType: string;
+  calc: Extract<ReturnType<typeof calculateSettlement>, { supported: false }>;
+  showId: string;
   deal: NonNullable<Awaited<ReturnType<typeof getShowById>>>["deal"];
   existingSettlement: NonNullable<
     Awaited<ReturnType<typeof getShowById>>
@@ -384,20 +395,40 @@ function UnsupportedDeal({
     door: "door deal",
   };
 
+  const needsStructure = calc.remediation?.kind === "structure_deal";
+
   return (
     <>
       <Card accent="amber">
-        <CardContent className="py-12 text-center">
+        <CardContent className="py-10 text-center">
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 ring-1 ring-amber-200/80 mb-5">
-            <FileWarning className="h-5 w-5 text-amber-700" />
+            {needsStructure ? (
+              <Sparkles className="h-5 w-5 text-amber-700" />
+            ) : (
+              <FileWarning className="h-5 w-5 text-amber-700" />
+            )}
           </div>
-          <h2 className="font-display text-[22px] font-medium text-ink-900 mb-2" style={{ letterSpacing: "-0.02em" }}>
-            The in-app tool can&apos;t settle a {friendly[dealType] ?? dealType} yet.
+          <h2
+            className="font-display text-[22px] font-medium text-ink-900 mb-2"
+            style={{ letterSpacing: "-0.02em" }}
+          >
+            {needsStructure
+              ? "This deal needs to be confirmed before it can be settled."
+              : `The in-app tool can't settle a ${friendly[calc.dealType] ?? calc.dealType} yet.`}
           </h2>
-          <p className="text-[13px] text-ink-500 max-w-md mx-auto leading-relaxed">
-            Mariana would do this on a Google Sheet at 2am tonight. The inputs
-            are below — but the math doesn&apos;t happen here.
+          <p className="text-[13px] text-ink-500 max-w-lg mx-auto leading-relaxed">
+            {calc.reason}
           </p>
+          {needsStructure && (
+            <Link
+              href={`/shows/${showId}/structure-deal`}
+              className="inline-flex items-center gap-1.5 mt-5 px-4 h-10 rounded-lg bg-brand-700 hover:bg-brand-800 text-white text-[13px] font-medium shadow-sm transition-colors"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Structure & send to agent
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          )}
         </CardContent>
       </Card>
 
@@ -488,6 +519,7 @@ function UnsupportedDeal({
 function SupportedSettlement({
   calc,
   existingSettlement,
+  dealLocked,
 }: {
   calc: Extract<
     ReturnType<typeof calculateSettlement>,
@@ -496,6 +528,7 @@ function SupportedSettlement({
   existingSettlement: NonNullable<
     Awaited<ReturnType<typeof getShowById>>
   >["settlement"];
+  dealLocked: boolean;
 }) {
   return (
     <>
@@ -508,6 +541,11 @@ function SupportedSettlement({
         >
           {formatMoney(calc.totalToArtist)}
         </div>
+        {dealLocked && (
+          <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-brand-700">
+            <Lock className="h-3 w-3" /> Running against locked deal
+          </div>
+        )}
         {existingSettlement && (
           <div className="mt-3">
             {existingSettlement.status === "paid" ? (
@@ -521,15 +559,50 @@ function SupportedSettlement({
           </div>
         )}
         {existingSettlement?.totalToArtist != null &&
-          existingSettlement.totalToArtist !== calc.totalToArtist && (
+          Math.abs(existingSettlement.totalToArtist - calc.totalToArtist) > 0.5 && (
           <div className="text-[12px] text-ink-400 mt-2">
             Originally settled at{" "}
             <span className="font-mono tabular text-ink-600">
               {formatMoney(existingSettlement.totalToArtist)}
             </span>
+            {existingSettlement.totalToArtist < calc.totalToArtist ? (
+              <span className="text-amber-700 ml-1.5">
+                · structured calc is ${formatMoney(calc.totalToArtist - existingSettlement.totalToArtist)} higher
+              </span>
+            ) : (
+              <span className="text-brand-700 ml-1.5">
+                · structured calc is ${formatMoney(existingSettlement.totalToArtist - calc.totalToArtist)} lower
+              </span>
+            )}
           </div>
         )}
       </div>
+
+      {/* Soft warnings */}
+      {calc.warnings.length > 0 && (
+        <Card accent="amber">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-700" />
+              <CardTitle>Warnings the math ran past</CardTitle>
+            </div>
+            <CardDescription>
+              The calculator continued and produced a number, but these are
+              worth Mariana&apos;s eyes before signoff.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {calc.warnings.map((w, i) => (
+              <div
+                key={i}
+                className="text-[12.5px] text-amber-900 bg-amber-50/40 rounded-md px-3 py-2 ring-1 ring-amber-200/60 leading-relaxed"
+              >
+                {w}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Worksheet breakdown */}
       <Card accent="brand">
@@ -542,23 +615,8 @@ function SupportedSettlement({
           </div>
         </CardHeader>
         <CardContent className="divide-y divide-ink-100/80">
-          <Row
-            label="Gross box office"
-            value={formatMoney(calc.grossBoxOffice)}
-          />
-          <Row label="Net box office" value={formatMoney(calc.netBoxOffice)} />
-          <Row
-            label="Total expenses (passed through)"
-            value={formatMoney(calc.totalExpenses)}
-          />
-          <div className="pt-3" />
           {calc.steps.map((step, i) => (
-            <Row
-              key={i}
-              label={step.label}
-              value={formatMoney(step.value)}
-              note={step.note}
-            />
+            <StepRow key={i} step={step} />
           ))}
           <div className="pt-3" />
           <div className="flex items-baseline justify-between py-3 font-semibold">
@@ -690,27 +748,54 @@ function SignoffSection({ settlement }: { settlement: Settlement }) {
   );
 }
 
-function Row({
-  label,
-  value,
-  note,
+function StepRow({
+  step,
 }: {
-  label: string;
-  value: string;
-  note?: string;
+  step: import("@/lib/dealMath").CalcStep;
 }) {
+  const sourceTone: Record<
+    NonNullable<typeof step.source>["kind"],
+    string
+  > = {
+    ticket_sales: "text-sky-700 bg-sky-50 ring-sky-200/70",
+    expenses: "text-amber-800 bg-amber-50 ring-amber-200/70",
+    deal_clause: "text-brand-700 bg-brand-50 ring-brand-200/70",
+    deal_recoup: "text-rose-700 bg-rose-50 ring-rose-200/70",
+    bonus: "text-violet-700 bg-violet-50 ring-violet-200/70",
+    computed: "text-ink-600 bg-ink-50 ring-ink-200/70",
+  };
+  const opLabel: Record<typeof step.op, string> = {
+    add: "+",
+    subtract: "−",
+    multiply: "×",
+    info: "·",
+    max: "↑",
+  };
   return (
-    <div className="flex items-baseline justify-between py-2.5">
-      <div>
-        <div className="text-[13px] text-ink-600">{label}</div>
-        {note && (
-          <div className="text-[11.5px] text-ink-400 mt-0.5 max-w-md leading-snug">
-            {note}
+    <div className="flex items-baseline justify-between gap-4 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] text-ink-800 leading-tight">{step.label}</div>
+        {step.source && (
+          <div
+            className={`mt-1 inline-flex items-center text-[10px] font-mono px-1.5 py-0.5 rounded ring-1 ring-inset ${sourceTone[step.source.kind]}`}
+            title={step.source.ref ?? undefined}
+          >
+            {step.source.label}
+          </div>
+        )}
+        {step.note && (
+          <div className="text-[11.5px] text-ink-400 mt-1 max-w-md leading-snug">
+            {step.note}
           </div>
         )}
       </div>
-      <div className="text-[13.5px] text-ink-900 font-mono tabular">
-        {value}
+      <div className="text-right">
+        <div className="text-[10px] text-ink-300 font-mono">{opLabel[step.op]}</div>
+        <div
+          className={`text-[13.5px] font-mono tabular ${step.value < 0 ? "text-rose-700" : "text-ink-900"}`}
+        >
+          {formatMoney(Math.abs(step.value))}
+        </div>
       </div>
     </div>
   );
