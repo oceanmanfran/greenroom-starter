@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { getShowById } from "@/lib/queries";
 import StructureDealClient from "./StructureDealClient";
-import { formatShowDateFull } from "@/lib/format";
 
 export default async function StructureDealPage({
   params,
@@ -19,7 +18,6 @@ export default async function StructureDealPage({
       dealId={deal.id}
       showId={show.id}
       artistName={artist?.name ?? "—"}
-      showDate={formatShowDateFull(show.date)}
       agent={
         agent
           ? { agentName: agent.name, agencyName: agency?.name ?? null }

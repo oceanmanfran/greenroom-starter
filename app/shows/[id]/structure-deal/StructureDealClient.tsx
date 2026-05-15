@@ -30,7 +30,6 @@ type Props = {
   dealId: string;
   showId: string;
   artistName: string;
-  showDate: string;
   agent: { agentName: string; agencyName: string | null } | null;
   initialProse: string;
   initialConfirmationStatus: string;
@@ -47,7 +46,6 @@ export default function StructureDealClient({
   dealId,
   showId,
   artistName,
-  showDate,
   agent,
   initialProse,
   initialConfirmationStatus,
