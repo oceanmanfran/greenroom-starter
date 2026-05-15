@@ -125,6 +125,39 @@ export const deals = sqliteTable("deals", {
   bonusesJson: text("bonuses_json"),
   dealNotesFreetext: text("deal_notes_freetext"),
 
+  // -------- #1 + #7: structured deal extensions --------
+  //
+  // The original schema put recoups only on the settlement record, meaning
+  // the interpretation happens at 2am, not at deal time. We move them onto
+  // the deal so both sides agree in writing before the show. `scope` is the
+  // field that prevents the Coastal Spell dispute: it forces an explicit
+  // answer to "is this recoup inside or outside the expense cap?"
+  //
+  // dealRecoupsJson schema:
+  //   [
+  //     { id, category, label, amount,
+  //       scope: "inside_cap" | "outside_cap" | "against_gross" | "unresolved",
+  //       source: string | null }   // the prose phrase or email ref that backs this
+  //   ]
+  dealRecoupsJson: text("deal_recoups_json"),
+
+  // Explicit deduction order, so the calculator and both parties agree on
+  // the order things come off gross. Stored as a JSON array of step ids.
+  deductionOrder: text("deduction_order"),
+
+  // Confirmation lifecycle, the "shared artifact" half of the slice.
+  confirmationStatus: text("confirmation_status", {
+    enum: ["draft", "sent_to_agent", "viewed", "confirmed", "disputed", "locked"],
+  })
+    .notNull()
+    .default("draft"),
+  confirmationToken: text("confirmation_token"),
+  sentToAgentAt: integer("sent_to_agent_at", { mode: "timestamp" }),
+  viewedByAgentAt: integer("viewed_by_agent_at", { mode: "timestamp" }),
+  confirmedByAgentAt: integer("confirmed_by_agent_at", { mode: "timestamp" }),
+  lockedAt: integer("locked_at", { mode: "timestamp" }),
+  agentNotes: text("agent_notes"),
+
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
 
@@ -331,5 +364,28 @@ export type Recoup = {
   amount: number;
   status: "agreed" | "disputed" | "withdrawn";
 };
+
+// Deal-level recoup, agreed at deal time. The `scope` field is the
+// resolution to the Coastal Spell ambiguity: an explicit, signed-off
+// answer to whether this recoup sits inside the expense cap, on top of
+// it, or comes off gross. "unresolved" means the AI flagged ambiguity
+// and the booker hasn't picked yet, so the deal can't be sent to the
+// agent for confirmation.
+export type DealRecoup = {
+  id: string;
+  category: "marketing" | "production" | "prior_advance" | "damages" | "other";
+  label: string;
+  amount: number;
+  scope: "inside_cap" | "outside_cap" | "against_gross" | "unresolved";
+  source: string | null;
+};
+
+// One step in the explicit deduction order, e.g. fees -> recoups_against_gross
+// -> expenses_capped. The calculator walks this list to derive net.
+export type DeductionStep =
+  | "fees"
+  | "recoups_against_gross"
+  | "recoups_outside_cap"
+  | "expenses_capped";
 
 export type SettlementStage = Settlement["status"];

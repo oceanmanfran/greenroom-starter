@@ -1048,6 +1048,41 @@ async function main() {
     }
   }
 
+  // -------- Backfill deal-confirmation lifecycle on past shows --------
+  //
+  // In the new model (slice #1), every deal is sent to the agent for
+  // confirmation before show night. Historical shows in this dataset
+  // happened the old way, but for the UI to look healthy we backdate
+  // their confirmation lifecycle as if it had run cleanly.
+  //
+  // Coastal Spell is the deliberate exception: it stays in "draft" with
+  // no structured recoups so the demo can walk it through resolution.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  for (const d of dealsToInsert) {
+    const show = showsToInsert.find((s) => s.id === d.showId);
+    if (!show) continue;
+    const isPast = show.date <= todayIso;
+    if (!isPast) {
+      d.confirmationStatus = "draft";
+      continue;
+    }
+    const created = d.createdAt as Date;
+    const sentAt = new Date(created.getTime() - 5 * 24 * 60 * 60 * 1000);
+    const viewedAt = new Date(sentAt.getTime() + 18 * 60 * 60 * 1000);
+    const confirmedAt = new Date(sentAt.getTime() + 36 * 60 * 60 * 1000);
+    d.confirmationStatus = "locked";
+    d.sentToAgentAt = sentAt;
+    d.viewedByAgentAt = viewedAt;
+    d.confirmedByAgentAt = confirmedAt;
+    d.lockedAt = confirmedAt;
+    d.confirmationToken = `tok_${d.id}_locked`;
+    d.deductionOrder = JSON.stringify([
+      "fees",
+      "recoups_against_gross",
+      "expenses_capped",
+    ]);
+  }
+
   // -------- Plant breadcrumbs: deliberate UI/data contradictions --------
   //
   // These are intentional inconsistencies that a sharp candidate should find
