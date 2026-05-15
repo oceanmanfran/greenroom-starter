@@ -78,6 +78,9 @@ export default async function StructureDealPage({
       initialConfirmationStatus={deal.confirmationStatus}
       initialToken={deal.confirmationToken}
       initialStructured={initialStructured}
+      initialViewedAt={deal.viewedByAgentAt ? deal.viewedByAgentAt.toISOString() : null}
+      initialConfirmedAt={deal.confirmedByAgentAt ? deal.confirmedByAgentAt.toISOString() : null}
+      initialAgentNotes={deal.agentNotes}
     />
   );
 }

@@ -52,7 +52,10 @@ export type SaveStructuredDealInput = {
 
 export async function saveStructuredDealAction(
   input: SaveStructuredDealInput,
-): Promise<{ ok: true } | { ok: false; reason: string }> {
+): Promise<
+  | { ok: true; newStatus: string; resetFromLocked: boolean }
+  | { ok: false; reason: string }
+> {
   const unresolved = input.dealRecoups.filter((r) => r.scope === "unresolved");
   if (unresolved.length > 0) {
     return {
@@ -60,6 +63,16 @@ export async function saveStructuredDealAction(
       reason: `${unresolved.length} recoup${unresolved.length === 1 ? "" : "s"} still have an unresolved scope. Pick inside cap, outside cap, or against gross before saving.`,
     };
   }
+
+  const current = (await db.select().from(deals).where(eq(deals.id, input.dealId)))[0];
+  if (!current) return { ok: false, reason: "Deal not found" };
+
+  // Amending a previously-locked or disputed deal invalidates the agent's
+  // signoff. Reset status to draft so the settle calculator refuses to run
+  // until the agent re-confirms. Magic-link token is also cleared so the
+  // old link 404s instead of pointing at stale terms.
+  const wasFinal = current.confirmationStatus === "locked" || current.confirmationStatus === "disputed";
+  const nextStatus = wasFinal ? "draft" : current.confirmationStatus;
 
   await db
     .update(deals)
@@ -77,10 +90,22 @@ export async function saveStructuredDealAction(
           ? JSON.stringify(input.bonuses)
           : null,
       dealNotesFreetext: input.dealNotesFreetext,
+      ...(wasFinal
+        ? {
+            confirmationStatus: "draft" as const,
+            confirmationToken: null,
+            lockedAt: null,
+            // Preserve sent/viewed/confirmed timestamps as audit history,
+            // but clear lock so settle gates correctly until re-send.
+          }
+        : {}),
     })
     .where(eq(deals.id, input.dealId));
 
-  return { ok: true };
+  revalidatePath(`/shows/${current.showId}`);
+  revalidatePath(`/shows/${current.showId}/structure-deal`);
+
+  return { ok: true, newStatus: nextStatus, resetFromLocked: wasFinal };
 }
 
 export async function sendToAgentAction(
