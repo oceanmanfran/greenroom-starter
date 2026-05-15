@@ -34,6 +34,12 @@ type Props = {
   initialProse: string;
   initialConfirmationStatus: string;
   initialToken: string | null;
+  /**
+   * If the deal has already been structured, hydrate the form with the
+   * saved fields so a user visiting the page on a sent/locked deal sees
+   * the agreed terms rather than an empty workspace.
+   */
+  initialStructured: ExtractedDeal | null;
 };
 
 const DEFAULT_DEDUCTION: DeductionStep[] = [
@@ -50,10 +56,20 @@ export default function StructureDealClient({
   initialProse,
   initialConfirmationStatus,
   initialToken,
+  initialStructured,
 }: Props) {
   const [prose, setProse] = useState(initialProse);
-  const [extraction, setExtraction] = useState<ExtractionResult | null>(null);
-  const [edited, setEdited] = useState<ExtractedDeal | null>(null);
+  const [extraction, setExtraction] = useState<ExtractionResult | null>(
+    initialStructured
+      ? {
+          mode: "mock",
+          extracted: initialStructured,
+          ambiguities: [],
+          notes: ["Loaded from the saved structured deal."],
+        }
+      : null,
+  );
+  const [edited, setEdited] = useState<ExtractedDeal | null>(initialStructured);
   const [extractPending, startExtract] = useTransition();
   const [savePending, startSave] = useTransition();
   const [sendPending, startSend] = useTransition();
