@@ -102,6 +102,85 @@ export type ShowWithRelations = NonNullable<
   Awaited<ReturnType<typeof getShowById>>
 >;
 
+/**
+ * Pull the slim history view an LLM needs to ground a deal extraction.
+ *
+ * Counts past shows, past disputed shows, and past disputed marketing
+ * recoups for the agent attached to this show. This is the data that
+ * turns generic "AI flagged ambiguity" into specific "this agent has
+ * disputed this exact phrasing 3 times" warnings.
+ */
+export async function getAgentContextForShow(showId: string): Promise<{
+  agentName: string;
+  agencyName: string | null;
+  totalShows: number;
+  disputedShows: number;
+  disputedMarketingRecoups: number;
+  preferencesNotes: string | null;
+} | null> {
+  const rows = await db
+    .select({ agent: agents, agency: agencies, artistId: artists.id })
+    .from(shows)
+    .leftJoin(artists, eq(shows.artistId, artists.id))
+    .leftJoin(agents, eq(artists.agentId, agents.id))
+    .leftJoin(agencies, eq(agents.agencyId, agencies.id))
+    .where(eq(shows.id, showId));
+
+  const row = rows[0];
+  if (!row?.agent) return null;
+
+  const agentId = row.agent.id;
+
+  const allRows = await db
+    .select({
+      showId: shows.id,
+      disputedAt: settlements.disputedAt,
+      recoupsJson: settlements.recoupsJson,
+    })
+    .from(shows)
+    .leftJoin(artists, eq(shows.artistId, artists.id))
+    .leftJoin(settlements, eq(settlements.showId, shows.id))
+    .where(eq(artists.agentId, agentId));
+
+  let totalShows = 0;
+  let disputedShows = 0;
+  let disputedMarketingRecoups = 0;
+  const seenShows = new Set<string>();
+  for (const r of allRows) {
+    if (!r.showId || seenShows.has(r.showId)) continue;
+    seenShows.add(r.showId);
+    totalShows++;
+    if (r.disputedAt) disputedShows++;
+    if (r.recoupsJson) {
+      try {
+        const recoups = JSON.parse(r.recoupsJson) as {
+          category: string;
+          status: string;
+        }[];
+        if (
+          Array.isArray(recoups) &&
+          recoups.some(
+            (x) => x.category === "marketing" && x.status === "disputed",
+          )
+        ) {
+          disputedMarketingRecoups++;
+        }
+      } catch {
+        // ignore malformed JSON
+      }
+    }
+  }
+
+  return {
+    agentName: row.agent.name,
+    agencyName: row.agency?.name ?? null,
+    totalShows,
+    disputedShows,
+    disputedMarketingRecoups,
+    preferencesNotes: row.agent.preferencesNotes ?? null,
+  };
+}
+
 /** All artists with show counts. */
 export async function getAllArtists() {
   return db
